@@ -125,6 +125,17 @@ func (f *fakeJira) UpdateWithOptions(old *jira.Issue, _ *jira.UpdateQueryOptions
 	return issue, nil, nil
 }
 
+func (f *fakeJira) AddComment(issueKey string, comment *jira.Comment) (*jira.Comment, *jira.Response, error) {
+	issue, ok := f.issuesByKey[issueKey]
+	if !ok {
+		return nil, nil, errors.Errorf("no such issue %s", issueKey)
+	}
+
+	f.AddComment(issueKey, comment)
+	f.issuesByKey[issue.Key] = issue
+	return nil, nil, nil
+}
+
 func (f *fakeJira) DoTransition(ticketID, transitionID string) (*jira.Response, error) {
 	issue, ok := f.issuesByKey[ticketID]
 	if !ok {

@@ -38,6 +38,7 @@ type jiraIssueService interface {
 
 	Create(issue *jira.Issue) (*jira.Issue, *jira.Response, error)
 	UpdateWithOptions(issue *jira.Issue, opts *jira.UpdateQueryOptions) (*jira.Issue, *jira.Response, error)
+	AddComment(ticketID string, comment *jira.Comment) (*jira.Comment, *jira.Response, error)
 	DoTransition(ticketID, transitionID string) (*jira.Response, error)
 }
 
@@ -78,6 +79,9 @@ func (r *Receiver) Notify(data *alertmanager.Data) (bool, error) {
 		return false, errors.Wrap(err, "generate summary from template")
 	}
 
+	level.Info(r.logger).Log("msg", "Summary from Jira: ", issue.Fields.Summary)
+	level.Info(r.logger).Log("msg", "Summary from Alert: ", issueSummary)
+
 	if issue != nil {
 		// Update summary if needed.
 		if issue.Fields.Summary != issueSummary {
@@ -88,14 +92,21 @@ func (r *Receiver) Notify(data *alertmanager.Data) (bool, error) {
 		}
 
 		if len(data.Alerts.Firing()) == 0 {
-			level.Debug(r.logger).Log("msg", "no firing alert; summary checked, nothing else to do.", "key", issue.Key, "label", issueGroupLabel)
+			level.Info(r.logger).Log("msg", "no firing alert; summary checked, nothing else to do.", "key", issue.Key, "label", issueGroupLabel)
 			return false, nil
 		}
 
 		// The set of JIRA status categories is fixed, this is a safe check to make.
 		if issue.Fields.Status.StatusCategory.Key != "done" {
-			level.Debug(r.logger).Log("msg", "issue is unresolved, all is done", "key", issue.Key, "label", issueGroupLabel)
-			return false, nil
+			level.Info(r.logger).Log("msg", "issue is unresolved, adding new comment", "key", issue.Key, "label", issueGroupLabel)
+			issueDesc, err := r.tmpl.Execute(r.conf.Description, data)
+			if err != nil {
+				return false, errors.Wrap(err, "render issue description")
+			}
+			comment := &jira.Comment{
+				Body: issueDesc,
+			}
+			return r.addComment(issue.Key, comment)
 		}
 
 		if r.conf.WontFixResolution != "" && issue.Fields.Resolution != nil &&
@@ -299,6 +310,18 @@ func (r *Receiver) updateSummary(issueKey string, summary string) (bool, error) 
 		return handleJiraErrResponse("Issue.UpdateWithOptions", resp, err, r.logger)
 	}
 	level.Debug(r.logger).Log("msg", "issue summary updated", "key", issue.Key, "id", issue.ID)
+	return false, nil
+}
+
+func (r *Receiver) addComment(issueKey string, comment *jira.Comment) (bool, error) {
+	level.Debug(r.logger).Log("msg", "adding new comment", "key", issueKey, "comment", comment)
+
+	comment, resp, err := r.client.AddComment(issueKey, comment)
+	if err != nil {
+		return handleJiraErrResponse("Issue.AddComment", resp, err, r.logger)
+	}
+
+	level.Debug(r.logger).Log("msg", "issue comment added", "key", issueKey)
 	return false, nil
 }
 
