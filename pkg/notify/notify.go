@@ -79,9 +79,6 @@ func (r *Receiver) Notify(data *alertmanager.Data) (bool, error) {
 		return false, errors.Wrap(err, "generate summary from template")
 	}
 
-	level.Info(r.logger).Log("msg", "Summary from Jira: ", issue.Fields.Summary)
-	level.Info(r.logger).Log("msg", "Summary from Alert: ", issueSummary)
-
 	if issue != nil {
 		// Update summary if needed.
 		if issue.Fields.Summary != issueSummary {
@@ -92,8 +89,12 @@ func (r *Receiver) Notify(data *alertmanager.Data) (bool, error) {
 		}
 
 		if len(data.Alerts.Firing()) == 0 {
-			level.Info(r.logger).Log("msg", "no firing alert; summary checked, nothing else to do.", "key", issue.Key, "label", issueGroupLabel)
-			return false, nil
+			if r.conf.CloseState == "" {
+				level.Info(r.logger).Log("msg", "no firing alert; summary checked, close_state not set.", "key", issue.Key, "label", issueGroupLabel)
+				return false, nil
+			}
+			level.Info(r.logger).Log("msg", "no firing alert; summary checked, closing issue.", "key", issue.Key, "label", issueGroupLabel)
+			return r.close(issue.Key)
 		}
 
 		// The set of JIRA status categories is fixed, this is a safe check to make.
@@ -344,6 +345,29 @@ func (r *Receiver) reopen(issueKey string) (bool, error) {
 		}
 	}
 	return false, errors.Errorf("JIRA state %q does not exist or no transition possible for %s", r.conf.ReopenState, issueKey)
+}
+
+func (r *Receiver) close(issueKey string) (bool, error) {
+	transitions, resp, err := r.client.GetTransitions(issueKey)
+	if err != nil {
+		return handleJiraErrResponse("Issue.GetTransitions", resp, err, r.logger)
+	}
+
+	level.Debug(r.logger).Log("msg", "CloseState", "value", r.conf.CloseState)
+	for _, t := range transitions {
+		level.Debug(r.logger).Log("msg", "Iterate transition ", "Name", t.Name)
+		if t.Name == r.conf.CloseState {
+			level.Debug(r.logger).Log("msg", "transition (close)", "key", issueKey, "transitionID", t.ID)
+			resp, err = r.client.DoTransition(issueKey, t.ID)
+			if err != nil {
+				return handleJiraErrResponse("Issue.DoTransition", resp, err, r.logger)
+			}
+
+			level.Debug(r.logger).Log("msg", "closed", "key", issueKey)
+			return false, nil
+		}
+	}
+	return false, errors.Errorf("JIRA state %q does not exist or no transition possible for %s", r.conf.CloseState, issueKey)
 }
 
 func (r *Receiver) create(issue *jira.Issue) (bool, error) {

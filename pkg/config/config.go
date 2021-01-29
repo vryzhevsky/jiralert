@@ -111,6 +111,7 @@ type ReceiverConfig struct {
 	Fields            map[string]interface{} `yaml:"fields" json:"fields"`
 	Components        []string               `yaml:"components" json:"components"`
 	ReopenDuration    *Duration              `yaml:"reopen_duration" json:"reopen_duration"`
+	CloseState        string                 `yaml:"close_state" json:"close_state"`
 
 	// Label copy settings
 	AddGroupLabels bool `yaml:"add_group_labels" json:"add_group_labels"`
@@ -224,6 +225,9 @@ func (c *Config) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		}
 
 		// Populate optional issue fields, where necessary
+		if rc.CloseState == "" && c.Defaults.CloseState != "" {
+			rc.CloseState = c.Defaults.CloseState
+		}
 		if rc.Priority == "" && c.Defaults.Priority != "" {
 			rc.Priority = c.Defaults.Priority
 		}
