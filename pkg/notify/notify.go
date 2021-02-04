@@ -109,7 +109,8 @@ func (r *Receiver) Notify(data *alertmanager.Data) (bool, error) {
 				Body: issueDesc,
 			}
 			r.addComment(issue.Key, comment)
-			return r.close(issue.Key)
+			r.close(issue.Key)
+			return false, nil
 		}
 
 		// The set of JIRA status categories is fixed, this is a safe check to make.
