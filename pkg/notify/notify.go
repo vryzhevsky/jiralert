@@ -91,9 +91,24 @@ func (r *Receiver) Notify(data *alertmanager.Data) (bool, error) {
 		if len(data.Alerts.Firing()) == 0 {
 			if r.conf.CloseState == "" {
 				level.Info(r.logger).Log("msg", "no firing alert; summary checked, close_state not set.", "key", issue.Key, "label", issueGroupLabel)
-				return false, nil
+				issueDesc, err := r.tmpl.Execute(r.conf.Description, data)
+				if err != nil {
+					return false, errors.Wrap(err, "render issue description")
+				}
+				comment := &jira.Comment{
+					Body: issueDesc,
+				}
+				return r.addComment(issue.Key, comment)
 			}
 			level.Info(r.logger).Log("msg", "no firing alert; summary checked, closing issue.", "key", issue.Key, "label", issueGroupLabel)
+			issueDesc, err := r.tmpl.Execute(r.conf.Description, data)
+			if err != nil {
+				return false, errors.Wrap(err, "render issue description")
+			}
+			comment := &jira.Comment{
+				Body: issueDesc,
+			}
+			r.addComment(issue.Key, comment)
 			return r.close(issue.Key)
 		}
 
