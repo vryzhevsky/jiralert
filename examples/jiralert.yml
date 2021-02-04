@@ -21,6 +21,8 @@ defaults:
   # Amount of time after being closed that an issue should be reopened, after which, a new issue is created.
   # Optional (default: always reopen)
   reopen_duration: 0h
+  # State to transition into when closing issue. Optional.
+  close_state: "Solved"
 
 # Receiver definitions. At least one must be defined.
 receivers:
